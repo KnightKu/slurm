@@ -128,6 +128,7 @@ typedef struct bb_user {
 
 #define BB_FLAG_BB_OP		1	/* Requested using #BB prefix */
 #define BB_FLAG_DW_OP		2	/* Requested using #DW prefix */
+#define BB_FLAG_LOD_OP		3	/* Requested using #LOD prefix */
 
 /* Burst buffer creation records with state */
 typedef struct {
