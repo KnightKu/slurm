@@ -169,8 +169,7 @@ extern int init(void)
 	slurm_mutex_lock(&bb_state.bb_mutex);
 	bb_load_config(&bb_state, (char *)plugin_type); /* Removes "const" */
 	_test_config();
-	if (bb_state.bb_config.debug_flag)
-		info("%s: %s", plugin_type,  __func__);
+	log_flag(BURST_BUF,"%s: %s", plugin_type,  __func__);
 	bb_alloc_cache(&bb_state);
 	slurm_mutex_unlock(&bb_state.bb_mutex);
 
@@ -197,8 +196,7 @@ extern int fini(void)
 	}
 
 	slurm_mutex_lock(&bb_state.bb_mutex);
-	if (bb_state.bb_config.debug_flag)
-		info("%s: %s", plugin_type,  __func__);
+	log_flag(BURST_BUF, "%s: %s", plugin_type,  __func__);
 
 	slurm_mutex_lock(&bb_state.term_mutex);
 	bb_state.term_flag = true;
@@ -729,8 +727,7 @@ extern int bb_p_job_try_stage_in(List job_queue)
 
 	debug2("LOD_DEBUG :entry bb_p_job_try_stage_in");
 	slurm_mutex_lock(&bb_state.bb_mutex);
-	if (bb_state.bb_config.debug_flag)
-		info("%s: %s", plugin_type,  __func__);
+	log_flag(BURST_BUF,"%s: %s", plugin_type,  __func__);
 
 	/* Identify candidates to be allocated burst buffers */
 	job_candidates = list_create(_job_queue_del);
@@ -844,8 +841,7 @@ static void* _start_stage_in(void *ptr)
 
 	debug2("LOD_DEBUG : %s entry", __func__);
 
-	track_script_rec_t *track_script_rec =
-		track_script_rec_add(job_id, 0, pthread_self());
+	track_script_rec_add(job_id, 0, pthread_self());
 
 	job_ptr = find_job_record(job_id);
 	bb_job = bb_job_find(&bb_state, job_id);
@@ -945,12 +941,11 @@ static void* _start_stage_in(void *ptr)
 		info("%s: setup for job JobId=%u ran for %s",
 		     __func__, job_id, TIME_STR);
 		free_command_argv(script_argv);
-		if (track_script_broadcast(track_script_rec, status)) {
+		if (track_script_broadcast(pthread_self(), status)) {
 			/* I was killed by slurmtrack, bail out right now */
 			info("%s: setup for JobId=%u terminated by slurmctld",
 			     __func__, job_id);
 			/*
-			 * Don't need to free track_script_rec here,
 			 * it is handled elsewhere since it still being tracked.
 			 */
 			return NULL;
@@ -1012,19 +1007,14 @@ static void* _start_stage_in(void *ptr)
 		END_TIMER;
 		free_command_argv(script_argv);
 
-		if (track_script_broadcast(track_script_rec, status)) {
+		if (track_script_broadcast(pthread_self(), status)) {
 			/* I was killed by slurmtrack, bail out right now */
 			info("%s: stage_in for JobId=%u terminated by slurmctld",
 			     __func__, job_id);
-			/*
-			 * Don't need to free track_script_rec here,
-			 * it is handled elsewhere since it still being tracked.
-			 */
 			return NULL;
 		}
 		track_script_reset_cpid(pthread_self(), 0);
-		if (bb_state.bb_config.debug_flag)
-			info("%s: stage_in ran for %s", __func__, TIME_STR);
+		log_flag(BURST_BUF, "%s: stage_in ran for %s", __func__, TIME_STR);
 
 		debug2("LOD_DEBUG: bb_p_job_begin stage_in rc=[%s]", rc_msg);
 
@@ -1100,7 +1090,6 @@ static void* _start_teardown(void *data) {
 	lod_bb_info_t *lod_bb;
 	uint32_t timeout;
 	DEF_TIMERS
-	track_script_rec_t *track_script_rec;
 	char *rc_msg;
 	char **script_argv;
 
@@ -1115,7 +1104,7 @@ static void* _start_teardown(void *data) {
 		timeout = DEFAULT_OTHER_TIMEOUT * 1000;
 
 	job_ptr = find_job_record(bb_job->job_id);
-	track_script_rec = track_script_rec_add(job_ptr->job_id, 0, pthread_self());
+	track_script_rec_add(job_ptr->job_id, 0, pthread_self());
 	script_argv = xcalloc(12, sizeof(char *));
 	script_argv[0] = xstrdup("lod");
         index = 1;
@@ -1189,7 +1178,7 @@ static void* _start_teardown(void *data) {
 	free_command_argv(script_argv);
 
 	debug2("LOD_DEBUG: %s after teardown rc=[%s]", __func__, rc_msg);
-	if (track_script_broadcast(track_script_rec, status)) {
+	if (track_script_broadcast(pthread_self(), status)) {
 		/* I was killed by slurmtrack, bail out right now */
 		info("%s: teardown for JobId=%u terminated by slurmctld",
 		     __func__, bb_job->job_id);
@@ -1235,7 +1224,6 @@ static void *_start_stage_out(void *data) {
 	lod_bb_info_t *lod_bb = (lod_bb_info_t *)bb_job->buf_ptr->access;;
 	uint32_t timeout;
 	DEF_TIMERS
-	track_script_rec_t *track_script_rec;
 	char *rc_msg;
 	char **script_argv;
 
@@ -1249,7 +1237,7 @@ static void *_start_stage_out(void *data) {
 		timeout = DEFAULT_OTHER_TIMEOUT * 1000;
 
 	script_argv = xcalloc(8, sizeof(char *));
-	track_script_rec = track_script_rec_add(bb_job->job_id, 0, pthread_self());
+	track_script_rec_add(bb_job->job_id, 0, pthread_self());
 	script_argv[0] = xstrdup("lod");
         index = 1;
 
@@ -1299,7 +1287,7 @@ static void *_start_stage_out(void *data) {
 	free_command_argv(script_argv);
 
 	debug2("LOD_DEBUG: bb_p_job_start_stage_out after stage_out rc=[%s]", rc_msg);
-	if (track_script_broadcast(track_script_rec, status)) {
+	if (track_script_broadcast(pthread_self(), status)) {
 		/* I was killed by slurmtrack, bail out right now */
 		info("%s: stage_out for JobId=%u terminated by slurmctld",
 		     __func__, bb_job->job_id);
@@ -1347,8 +1335,7 @@ extern int bb_p_job_start_stage_out(struct job_record *job_ptr)
 
 	debug2("LOD_DEBUG : %s entry", __func__);
 
-	if (bb_state.bb_config.debug_flag)
-		info("%s: %s: %pJ", plugin_type, __func__, job_ptr);
+	log_flag(BURST_BUF, "%s: %s: %pJ", plugin_type, __func__, job_ptr);
 
 	bb_job = _get_bb_job(job_ptr);
 	if (!bb_job) {
@@ -1445,8 +1432,7 @@ extern int bb_p_job_cancel(struct job_record *job_ptr)
 
 	debug2("LOD_DEBUG : %s entry", __func__);
 
-	if (bb_state.bb_config.debug_flag)
-		info("%s: %s: %pJ", plugin_type, __func__, job_ptr);
+	log_flag(BURST_BUF, "%s: %s: %pJ", plugin_type, __func__, job_ptr);
 
 	bb_job = _get_bb_job(job_ptr);
 	if (!bb_job) {
